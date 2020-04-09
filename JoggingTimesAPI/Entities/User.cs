@@ -45,6 +45,8 @@ namespace JoggingTimesAPI
                 PasswordHashKey = hmac.Key;
                 PasswordHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
             }
+
+            NewPassword = null;
         }
     }
 }

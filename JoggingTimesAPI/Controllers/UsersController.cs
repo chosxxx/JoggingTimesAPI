@@ -19,6 +19,7 @@ using Microsoft.Extensions.Options;
 
 namespace JoggingTimesAPI.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class UsersController : ControllerBase
@@ -52,6 +53,7 @@ namespace JoggingTimesAPI.Controllers
             {
                 user.Username,
                 user.EmailAddress,
+                user.Role,
                 Token = tokenString
             });
         }
@@ -77,6 +79,10 @@ namespace JoggingTimesAPI.Controllers
         [HttpPut("update")]
         public async Task<IActionResult> Update(UserUpdateModel model)
         {
+            if (!HttpContext.User.IsInRole("admin"))
+            {
+
+            }
             var user = _mapper.Map<User>(model);
             user.NewPassword = model.Password;
 

@@ -16,9 +16,9 @@ namespace JoggingTimesAPI.Services
 
     public class UserService : IUserService
     {
-        private readonly DataContext _context;
+        private readonly JoggingTimesDataContext _context;
         
-        public UserService(DataContext context)
+        public UserService(JoggingTimesDataContext context)
         {
             _context = context;
         }
@@ -28,7 +28,8 @@ namespace JoggingTimesAPI.Services
             if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(password))
                 return null;
 
-            var user = await _context.Users.SingleAsync(u => u.Username.Equals(userName, StringComparison.OrdinalIgnoreCase));
+            var user = await _context.Users.SingleOrDefaultAsync(
+                u => u.Username.Equals(userName, StringComparison.OrdinalIgnoreCase));
 
             if (user == null || !user.ValidatePassword(password))
             {
@@ -62,7 +63,8 @@ namespace JoggingTimesAPI.Services
 
         public async Task<User> Update(User user)
         {
-            var existingUser = await _context.Users.SingleAsync(u => u.Username.Equals(user.Username, StringComparison.OrdinalIgnoreCase));
+            var existingUser = await _context.Users.SingleOrDefaultAsync(
+                u => u.Username.Equals(user.Username, StringComparison.OrdinalIgnoreCase));
 
             if (existingUser == null)
                 throw new ApplicationException($"User {user.Username} not found.");
