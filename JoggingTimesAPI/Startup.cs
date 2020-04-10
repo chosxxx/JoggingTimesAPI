@@ -55,7 +55,7 @@ namespace JoggingTimesAPI
                     {
                         var userService = context.HttpContext.RequestServices.GetRequiredService<IUserService>();
                         var userName = context.Principal.Identity.Name;
-                        var user = await userService.GetByUsername(userName);
+                        var user = await userService.GetByUsername(userName, new User { Username = "FakeAdmin", Role = UserRole.Admin });
                         if (user == null)
                         {
                             // return unauthorized if user no longer exists

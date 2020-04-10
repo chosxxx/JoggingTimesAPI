@@ -1,7 +1,6 @@
 ﻿using JoggingTimesAPI.Helpers;
 using Microsoft.EntityFrameworkCore;
 using System;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace JoggingTimesAPI.Services
@@ -9,9 +8,11 @@ namespace JoggingTimesAPI.Services
     public interface IUserService
     {
         Task<User> Authenticate(string userName, string password);
-        Task<User> Register(User user);
-        Task<User> Update(User user);
-        Task<User> GetByUsername(string userName);
+        Task<User> Create(User user);
+        Task<User> Create(User user, User authenticatedUser);
+        Task<User> Update(User user, User authenticatedUser);
+        Task<User> GetByUsername(string userName, User authenticatedUser);
+        Task<User> DeleteByUsername(string userName, User authenticatedUser);
     }
 
     public class UserService : IUserService
@@ -39,21 +40,39 @@ namespace JoggingTimesAPI.Services
             return user;
         }
 
-        public async Task<User> GetByUsername(string userName)
+        public async Task<User> GetByUsername(string userName, User authenticatedUser)
         {
             if (string.IsNullOrEmpty(userName)) return null;
 
-            return await _context.Users.SingleAsync(u => u.Username.Equals(userName, StringComparison.OrdinalIgnoreCase));
+            var existingUser = await _context.Users
+                .SingleOrDefaultAsync(u => u.Username.Equals(userName, StringComparison.OrdinalIgnoreCase));
+
+            AuthorizeAction(existingUser.Username, existingUser.Role, authenticatedUser);
+
+            return existingUser;
         }
 
-        public async Task<User> Register(User user)
+        /// <summary>
+        /// Create user with User role without being Authenticated.
+        /// </summary>
+        /// <param name="user"></param>
+        /// <returns></returns>
+        public async Task<User> Create(User user)
+        {
+            user.Role = UserRole.User;
+            return await Create(user, null);
+        }
+
+        public async Task<User> Create(User user, User authenticatedUser)
         {
             if (await _context.Users.AnyAsync(u => u.Username.Equals(user.Username, StringComparison.OrdinalIgnoreCase)))
             {
                 throw new ArgumentException($"User {user.Username} already exists.");
             }
 
-            user.SetHashedPassword();
+            // Anonymous user can only register as User
+            if (user.Role != UserRole.User || authenticatedUser != null)
+                AuthorizeAction(user.Username, user.Role, authenticatedUser);
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
@@ -61,19 +80,25 @@ namespace JoggingTimesAPI.Services
             return user;
         }
 
-        public async Task<User> Update(User user)
+        public async Task<User> Update(User user, User authenticatedUser)
         {
+            // Don't allow update TO a higher role than the authorized
+            AuthorizeAction(user.Username, user.Role, authenticatedUser);
+
             var existingUser = await _context.Users.SingleOrDefaultAsync(
                 u => u.Username.Equals(user.Username, StringComparison.OrdinalIgnoreCase));
 
             if (existingUser == null)
                 throw new ApplicationException($"User {user.Username} not found.");
 
+            // AND don't allow update FROM a higher role than the authorized
+            AuthorizeAction(existingUser.Username, existingUser.Role, authenticatedUser);
+
             if (!string.IsNullOrEmpty(user.EmailAddress))
                 existingUser.EmailAddress = user.EmailAddress;
 
             if (!string.IsNullOrEmpty(user.NewPassword))
-                existingUser.SetHashedPassword(user.NewPassword);
+                existingUser.NewPassword = user.NewPassword;
 
             existingUser.Role = user.Role;
 
@@ -81,6 +106,35 @@ namespace JoggingTimesAPI.Services
             await _context.SaveChangesAsync();
 
             return existingUser;
+        }
+
+        public async Task<User> DeleteByUsername(string userName, User authenticatedUser)
+        {
+            var existingUser = await _context.Users.SingleOrDefaultAsync(
+                u => u.Username.Equals(userName, StringComparison.OrdinalIgnoreCase));
+
+            if (existingUser == null)
+                throw new ApplicationException($"User {userName} not found.");
+
+            AuthorizeAction(existingUser.Username, existingUser.Role, authenticatedUser);
+
+            _context.Users.Remove(existingUser);
+            await _context.SaveChangesAsync();
+
+            return existingUser;
+        }
+
+        private void AuthorizeAction(string targetUserName, UserRole targetRole, User authenticatedUser)
+        {
+            // An User with no higher priviledges can only CRUD himself.
+            if ((authenticatedUser.Role == UserRole.User && (!authenticatedUser.Username.Equals(targetUserName) || targetRole > UserRole.User)) ||
+            // A Manager can only CRUD Users and himself
+                (authenticatedUser.Role == UserRole.Manager && targetRole != UserRole.User &&
+                    (targetRole != UserRole.Manager || !authenticatedUser.Username.Equals(targetUserName))))
+            // An Admin can CRUD any record
+            {
+                throw new InvalidOperationException("User is unauthorized to perform this action.");
+            }
         }
     }
 }

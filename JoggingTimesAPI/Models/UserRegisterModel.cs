@@ -14,7 +14,5 @@ namespace JoggingTimesAPI.Models
         public string EmailAddress { get; set; }
         [Required]
         public string Password { get; set; }
-        [Required]
-        public UserRole Role { get; set; }
     }
 }

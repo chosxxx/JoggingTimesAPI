@@ -27,6 +27,29 @@ namespace JoggingTimesAPI.Controllers
         private IUserService _userService;
         private IMapper _mapper;
         private readonly AppSettings _appSettings;
+        private User _authenticatedUser;
+
+        public User AuthenticatedUser
+        {
+            get
+            {
+                if (User != null && _authenticatedUser == null)
+                {
+                    _authenticatedUser = new User
+                    {
+                        Username = User.Identity.Name,
+                        Role = Enum.Parse<UserRole>(User.Claims.Single(c => c.Type == ClaimTypes.Role).Value)
+                    };
+                }
+                return _authenticatedUser;
+            }
+            set
+            {
+                if (User != null)
+                    throw new ApplicationException("Cannot change Authenticated User, property is read-only.");
+                _authenticatedUser = value;
+            }
+        }
 
         public UsersController(
             IUserService userService,
@@ -47,19 +70,18 @@ namespace JoggingTimesAPI.Controllers
             if (user == null)
                 return BadRequest(new { message = "Invalid username and/or password." });
             
-            var tokenString = GetAuthToken(user.Username);
+            var tokenString = GetAuthToken(user.Username, user.Role);
 
             return Ok(new
             {
                 user.Username,
-                user.EmailAddress,
                 user.Role,
                 Token = tokenString
             });
         }
 
         [AllowAnonymous]
-        [HttpPost("register")]
+        [HttpPut("register")]
         public async Task<ActionResult<User>> Register(UserRegisterModel model)
         {
             var user = _mapper.Map<User>(model);
@@ -67,7 +89,7 @@ namespace JoggingTimesAPI.Controllers
 
             try
             {
-                user = await _userService.Register(user);
+                user = await _userService.Create(user);
                 return Ok(user);
             }
             catch (Exception ex)
@@ -79,16 +101,12 @@ namespace JoggingTimesAPI.Controllers
         [HttpPut("update")]
         public async Task<IActionResult> Update(UserUpdateModel model)
         {
-            if (!HttpContext.User.IsInRole("admin"))
-            {
-
-            }
             var user = _mapper.Map<User>(model);
             user.NewPassword = model.Password;
 
             try
             {
-                await _userService.Update(user);
+                await _userService.Update(user, AuthenticatedUser);
                 return Ok();
             }
             catch (Exception ex)
@@ -97,7 +115,7 @@ namespace JoggingTimesAPI.Controllers
             }
         }
 
-        private string GetAuthToken(string userName)
+        private string GetAuthToken(string userName, UserRole role)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_appSettings.Secret);
@@ -105,7 +123,8 @@ namespace JoggingTimesAPI.Controllers
             {
                 Subject = new ClaimsIdentity(new Claim[]
                 {
-                    new Claim(ClaimTypes.Name, userName)
+                    new Claim(ClaimTypes.Name, userName),
+                    new Claim(ClaimTypes.Role, role.ToString())
                 }),
                 Expires = DateTime.UtcNow.AddDays(7),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)

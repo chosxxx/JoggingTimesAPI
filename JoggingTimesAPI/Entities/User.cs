@@ -13,11 +13,24 @@ namespace JoggingTimesAPI
 
     public class User
     {
+        private string _newPassword;
+
         [Key]
         public string Username { get; set; }
         public string EmailAddress { get; set; }
         [NotMapped]
-        public string NewPassword { set; get; }
+        public string NewPassword { 
+            set
+            {
+                _newPassword = value;
+                if (!string.IsNullOrEmpty(value))
+                    SetHashedPassword();
+            }
+            get
+            {
+                return _newPassword;
+            }
+        }
         protected byte[] PasswordHashKey { get; set; }
         protected byte[] PasswordHash { get; set; }
         public UserRole Role { get; set; }
@@ -35,18 +48,13 @@ namespace JoggingTimesAPI
             return true;
         }
 
-        public void SetHashedPassword() => SetHashedPassword(NewPassword);
-        public void SetHashedPassword(string password)
+        private void SetHashedPassword()
         {
-            if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password cannot be empty.");
-
             using (var hmac = new System.Security.Cryptography.HMACSHA512())
             {
                 PasswordHashKey = hmac.Key;
-                PasswordHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
+                PasswordHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(_newPassword));
             }
-
-            NewPassword = null;
         }
     }
 }
