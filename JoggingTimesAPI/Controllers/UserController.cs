@@ -22,12 +22,31 @@ namespace JoggingTimesAPI.Controllers
     [Authorize]
     [Route("api/[controller]")]
     [ApiController]
-    public class UsersController : ControllerBase
+    public class UserController : ControllerBase
     {
         private IUserService _userService;
         private IMapper _mapper;
         private readonly AppSettings _appSettings;
         private User _authenticatedUser;
+
+        private string GetAuthToken(string userName, UserRole role)
+        {
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes(_appSettings.Secret);
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(new Claim[]
+                {
+                    new Claim(ClaimTypes.Name, userName),
+                    new Claim(ClaimTypes.Role, role.ToString())
+                }),
+                Expires = DateTime.UtcNow.AddDays(7),
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            };
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            var tokenString = tokenHandler.WriteToken(token);
+            return tokenString;
+        }
 
         public User AuthenticatedUser
         {
@@ -51,7 +70,7 @@ namespace JoggingTimesAPI.Controllers
             }
         }
 
-        public UsersController(
+        public UserController(
             IUserService userService,
             IMapper mapper,
             IOptions<AppSettings> appSettings)
@@ -82,7 +101,7 @@ namespace JoggingTimesAPI.Controllers
 
         [AllowAnonymous]
         [HttpPut("register")]
-        public async Task<ActionResult<User>> Register(UserRegisterModel model)
+        public async Task<IActionResult> Register(UserRegisterModel model)
         {
             var user = _mapper.Map<User>(model);
             user.NewPassword = model.Password;
@@ -106,8 +125,8 @@ namespace JoggingTimesAPI.Controllers
 
             try
             {
-                await _userService.Update(user, AuthenticatedUser);
-                return Ok();
+                user = await _userService.Update(user, AuthenticatedUser);
+                return Ok(user);
             }
             catch (Exception ex)
             {
@@ -115,23 +134,18 @@ namespace JoggingTimesAPI.Controllers
             }
         }
 
-        private string GetAuthToken(string userName, UserRole role)
+        [HttpDelete]
+        public async Task<IActionResult> DeleteByName(string userName)
         {
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_appSettings.Secret);
-            var tokenDescriptor = new SecurityTokenDescriptor
+            try
             {
-                Subject = new ClaimsIdentity(new Claim[]
-                {
-                    new Claim(ClaimTypes.Name, userName),
-                    new Claim(ClaimTypes.Role, role.ToString())
-                }),
-                Expires = DateTime.UtcNow.AddDays(7),
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-            };
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            var tokenString = tokenHandler.WriteToken(token);
-            return tokenString;
+                var user = await _userService.DeleteByUsername(userName, AuthenticatedUser);
+                return Ok(user);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
     }
 }

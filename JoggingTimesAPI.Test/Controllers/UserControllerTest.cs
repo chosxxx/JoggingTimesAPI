@@ -1,45 +1,173 @@
-﻿using Xunit;
-using Moq;
+﻿using JoggingTimesAPI.Controllers;
 using JoggingTimesAPI.Helpers;
-using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
-using System;
 using JoggingTimesAPI.Services;
-using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Moq;
 using Shouldly;
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Threading.Tasks;
+using Xunit;
 
-namespace JoggingTimesAPI.Test.Services
+namespace JoggingTimesAPI.Test.Controllers
 {
-    public class UserServiceTest
+    public class UserControllerTest
     {
-        private const string unauthorizedErrorMessage = "User is unauthorized to perform this action.";
         private MockBuilder _mockBuilder;
-        private UserService _userService;
-        private Mock<JoggingTimesDataContext> _dataContext;
+        private Mock<IUserService> _userService;
+        private UserController _userController;
 
-        public UserServiceTest()
+        public UserControllerTest()
         {
             _mockBuilder = new MockBuilder();
-            _dataContext = new Mock<JoggingTimesDataContext>(
-                new DbContextOptionsBuilder<JoggingTimesDataContext>()
-                .UseInMemoryDatabase("TestJogglingTimesDB").Options);
-            _userService = new UserService(_dataContext.Object);
+            _userService = _mockBuilder.GenerateMockUserService();
+            _userController = new UserController(
+                _userService.Object,
+                _mockBuilder.CreateMapper(),
+                Options.Create(new AppSettings { Secret = "DontUseThisUnsafeSecret" }));
         }
 
-        #region Test Anonymous
-        [Fact]
-        [Trait("CRUD", "Anonymous")]
-        public async Task TestValidUserAuthenticates()
+        private void ValidateActionResult(IActionResult actionResult, Type expectedResultType, IDictionary<string, object> propertyValues)
         {
-            var userListMock = _mockBuilder.GenerateMockUsers(10, new List<User>{ _mockBuilder.UserUser });
+            actionResult.ShouldBeOfType(expectedResultType);
+            var requestResult = (actionResult as ObjectResult).Value;
 
-            _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
-
-            var authenticatedUser = await _userService.Authenticate(_mockBuilder.UserUser.Username, _mockBuilder.UserUser.NewPassword);
-
-            authenticatedUser.ShouldBeSameAs(_mockBuilder.UserUser);
+            foreach (var pv in propertyValues)
+            {
+                requestResult
+                    .GetType()
+                    .GetProperty(pv.Key)
+                    .GetValue(requestResult)
+                    .ShouldBe(pv.Value);
+            }
         }
 
+        [Fact]
+        [Trait("Actions", "User")]
+        public async Task TestUserCanRegister()
+        {
+            _userService.Setup(s => s.Create(It.IsAny<User>())).ReturnsAsync(_mockBuilder.UserUser);
+
+            var actionResult = await _userController.Register(new Models.UserRegisterModel
+            {
+                Username = _mockBuilder.UserUser.Username,
+                Password = _mockBuilder.UserUser.NewPassword,
+                EmailAddress = _mockBuilder.UserUser.EmailAddress
+            });
+
+            ValidateActionResult(actionResult, typeof(OkObjectResult),
+                new Dictionary<string, object> {
+                        { "Username", _mockBuilder.UserUser.Username },
+                        { "NewPassword", _mockBuilder.UserUser.NewPassword },
+                        { "EmailAddress", _mockBuilder.UserUser.EmailAddress },
+                    });
+
+            actionResult.ShouldBeOfType(typeof(OkObjectResult));
+            var userResult = (User)(actionResult as OkObjectResult).Value;
+            userResult.Username.ShouldBe(_mockBuilder.UserUser.Username);
+
+            _userService.Verify(s => s.Create(It.IsAny<User>()), Times.Once);
+        }
+
+        [Fact]
+        [Trait("Actions", "User")]
+        public async Task TestOnlyValidUserCanAuthenticate()
+        {
+            _userService.Setup(s => s.Authenticate(_mockBuilder.UserUser.Username, _mockBuilder.UserUser.NewPassword))
+                .ReturnsAsync(_mockBuilder.UserUser);
+
+            var actionResult = await _userController.Authenticate(new Models.UserAuthenticateModel
+            {
+                Username = _mockBuilder.UserUser.Username,
+                Password = _mockBuilder.UserUser.NewPassword
+            });
+            ValidateActionResult(actionResult, typeof(OkObjectResult),
+                new Dictionary<string, object> {
+                    { "Username", _mockBuilder.UserUser.Username },
+                    { "Role", _mockBuilder.UserUser.Role }
+                });
+
+            actionResult = await _userController.Authenticate(new Models.UserAuthenticateModel
+            {
+                Username = _mockBuilder.ManagerUser.Username,
+                Password = _mockBuilder.ManagerUser.NewPassword
+            });
+
+            ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+            new Dictionary<string, object> {
+                    { "message", "Invalid username and/or password." }
+                });
+        }
+
+        [Fact]
+        [Trait("Actions", "User")]
+        public async Task TestOnlyValidUserCanUpdate()
+        {
+            _userService.Setup(s => s.Update(It.IsAny<User>(), null))
+                .ThrowsAsync(new InvalidOperationException("Exception message"));
+            _userService.Setup(s => s.Update(It.IsAny<User>(), It.IsNotNull<User>()))
+                .ReturnsAsync(_mockBuilder.UserUser);
+
+            var updateModel = new Models.UserUpdateModel
+            {
+                Username = _mockBuilder.UserUser.Username,
+                Password = _mockBuilder.UserUser.NewPassword,
+                Role = _mockBuilder.UserUser.Role,
+                EmailAddress = _mockBuilder.UserUser.EmailAddress,
+            };
+
+            // If not authenticated, should not allow update
+            var actionResult = await _userController.Update(updateModel);
+            ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+                new Dictionary<string, object> {
+                    { "message", "Exception message" }
+                });
+
+            // If authenticated, should allow update
+            _userController.AuthenticatedUser = _mockBuilder.AdminUser;
+            actionResult = await _userController.Update(updateModel);
+            ValidateActionResult(actionResult, typeof(OkObjectResult),
+            new Dictionary<string, object> {
+                    { "Username", _mockBuilder.UserUser.Username },
+                    { "NewPassword", _mockBuilder.UserUser.NewPassword },
+                    { "Role", _mockBuilder.UserUser.Role },
+                    { "EmailAddress", _mockBuilder.UserUser.EmailAddress },
+                });
+            _userController.AuthenticatedUser = null;
+        }
+
+        [Fact]
+        [Trait("Actions", "User")]
+        public async Task TestOnlyValidUserCanDelete()
+        {
+            _userService.Setup(s => s.DeleteByUsername(It.IsAny<string>(), null))
+                .ThrowsAsync(new InvalidOperationException("Exception message"));
+            _userService.Setup(s => s.DeleteByUsername(It.IsAny<string>(), It.IsNotNull<User>()))
+                .ReturnsAsync(_mockBuilder.UserUser);
+
+            // If not authenticated, should not allow delete
+            var actionResult = await _userController.DeleteByName(_mockBuilder.UserUser.Username);
+            ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+                new Dictionary<string, object> {
+                    { "message", "Exception message" }
+                });
+
+            // If authenticated, should allow delete
+            _userController.AuthenticatedUser = _mockBuilder.AdminUser;
+            actionResult = await _userController.DeleteByName(_mockBuilder.UserUser.Username);
+            ValidateActionResult(actionResult, typeof(OkObjectResult),
+                new Dictionary<string, object> {
+                    { "Username", _mockBuilder.UserUser.Username },
+                    { "NewPassword", _mockBuilder.UserUser.NewPassword },
+                    { "Role", _mockBuilder.UserUser.Role },
+                    { "EmailAddress", _mockBuilder.UserUser.EmailAddress },
+                });
+            _userController.AuthenticatedUser = null;
+        }
+
+        /*
         [Fact]
         [Trait("CRUD", "Anonymous")]
         public async Task TestInValidUserShouldNotAuthenticate()
@@ -52,34 +180,6 @@ namespace JoggingTimesAPI.Test.Services
 
             authenticatedUser.ShouldBeNull();
         }
-
-        [Fact]
-        [Trait("CRUD", "Anonymous")]
-        public async Task TestRegisterNewUserShouldBeUser()
-        {
-            var userListMock = _mockBuilder.GenerateMockUsers(5);
-            userListMock.Setup(u => u.Add(It.IsAny<User>()));
-
-            _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
-            var returnedUser = await _userService.Create(_mockBuilder.AdminUser);
-
-            userListMock.Verify(u => u.Add(_mockBuilder.AdminUser), Times.Once);
-            returnedUser.Role.ShouldBe(UserRole.User);
-        }
-
-        [Fact]
-        [Trait("CRUD", "Anonymous")]
-        public async Task TestRegisterExistingUserShouldFail()
-        {
-            var userListMock = _mockBuilder.GenerateMockUsers(5, new List<User> { _mockBuilder.ManagerUser });
-            userListMock.Setup(u => u.Add(It.IsAny<User>()));
-
-            _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
-            (await Should
-                .ThrowAsync< ArgumentException>(_userService.Create(_mockBuilder.ManagerUser)))
-                .Message.ShouldBe($"User {_mockBuilder.ManagerUser.Username} already exists.");
-            userListMock.Verify(u => u.Add(_mockBuilder.AdminUser), Times.Never);
-        }
         #endregion
 
         #region Test CRUD User
@@ -90,7 +190,7 @@ namespace JoggingTimesAPI.Test.Services
             var authenticatedUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, false);
             var anotherUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, true);
 
-            var userListMock = _mockBuilder.GenerateMockUsers(10, 
+            var userListMock = _mockBuilder.GenerateMockUsers(10,
                 new List<User> { _mockBuilder.UserUser, _mockBuilder.ManagerUser, _mockBuilder.AdminUser, anotherUser });
 
             _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
@@ -141,7 +241,7 @@ namespace JoggingTimesAPI.Test.Services
             var authenticatedUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, false);
             var anotherUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, true);
 
-            var userListMock = _mockBuilder.GenerateMockUsers(5, 
+            var userListMock = _mockBuilder.GenerateMockUsers(5,
                 new List<User> { _mockBuilder.ManagerUser, _mockBuilder.UserUser, anotherUser });
             userListMock.Setup(u => u.Update(It.IsAny<User>()));
 
@@ -181,7 +281,7 @@ namespace JoggingTimesAPI.Test.Services
             var authenticatedUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, false);
             var anotherUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, true);
 
-            var userListMock = _mockBuilder.GenerateMockUsers(5, 
+            var userListMock = _mockBuilder.GenerateMockUsers(5,
                 new List<User> { _mockBuilder.ManagerUser, _mockBuilder.UserUser, anotherUser });
             userListMock.Setup(u => u.Remove(It.IsAny<User>()));
 
@@ -212,7 +312,7 @@ namespace JoggingTimesAPI.Test.Services
             var authenticatedManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, false);
             var anotherManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, true);
 
-            var userListMock = _mockBuilder.GenerateMockUsers(10, 
+            var userListMock = _mockBuilder.GenerateMockUsers(10,
                 new List<User> { _mockBuilder.UserUser, _mockBuilder.ManagerUser, _mockBuilder.AdminUser, anotherManager });
 
             _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
@@ -273,7 +373,7 @@ namespace JoggingTimesAPI.Test.Services
             var authenticatedManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, false);
             var anotherManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, true);
 
-            var userListMock = _mockBuilder.GenerateMockUsers(5, 
+            var userListMock = _mockBuilder.GenerateMockUsers(5,
                 new List<User> { _mockBuilder.ManagerUser, _mockBuilder.UserUser, _mockBuilder.AdminUser, anotherManager });
             userListMock.Setup(u => u.Update(It.IsAny<User>()));
 
@@ -319,7 +419,7 @@ namespace JoggingTimesAPI.Test.Services
             var authenticatedManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, false);
             var anotherManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, true);
 
-            var userListMock = _mockBuilder.GenerateMockUsers(5, 
+            var userListMock = _mockBuilder.GenerateMockUsers(5,
                 new List<User> { _mockBuilder.ManagerUser, _mockBuilder.UserUser, _mockBuilder.AdminUser, anotherManager });
             userListMock.Setup(u => u.Remove(It.IsAny<User>()));
 
@@ -355,7 +455,7 @@ namespace JoggingTimesAPI.Test.Services
             var authenticatedAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, false);
             var anotherAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, true);
 
-            var userListMock = _mockBuilder.GenerateMockUsers(10, 
+            var userListMock = _mockBuilder.GenerateMockUsers(10,
                 new List<User> { _mockBuilder.UserUser, _mockBuilder.ManagerUser, _mockBuilder.AdminUser, anotherAdmin });
 
             _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
@@ -409,7 +509,7 @@ namespace JoggingTimesAPI.Test.Services
             var authenticatedAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, false);
             var anotherAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, true);
 
-            var userListMock = _mockBuilder.GenerateMockUsers(5, 
+            var userListMock = _mockBuilder.GenerateMockUsers(5,
                 new List<User> { _mockBuilder.ManagerUser, _mockBuilder.UserUser, _mockBuilder.AdminUser, anotherAdmin });
             userListMock.Setup(u => u.Update(It.IsAny<User>()));
 
@@ -447,7 +547,7 @@ namespace JoggingTimesAPI.Test.Services
             var authenticatedAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, false);
             var anotherAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, true);
 
-            var userListMock = _mockBuilder.GenerateMockUsers(5, 
+            var userListMock = _mockBuilder.GenerateMockUsers(5,
                 new List<User> { _mockBuilder.ManagerUser, _mockBuilder.UserUser, _mockBuilder.AdminUser, anotherAdmin });
             userListMock.Setup(u => u.Remove(It.IsAny<User>()));
 
@@ -469,6 +569,6 @@ namespace JoggingTimesAPI.Test.Services
             returnedUser = await _userService.DeleteByUsername(anotherAdmin.Username, authenticatedAdmin);
             userListMock.Verify(u => u.Remove(anotherAdmin), Times.Once);
         }
-        #endregion
+        #endregion*/
     }
 }

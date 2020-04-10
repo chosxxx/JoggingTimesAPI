@@ -1,18 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using JoggingTimesAPI.Helpers;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace JoggingTimesAPI.Models
 {
     public class UserRegisterModel
     {
-        [Required]
+        [Required(AllowEmptyStrings = false)]
         public string Username { get; set; }
-        [Required]
+        [Required(AllowEmptyStrings = false)]
         public string EmailAddress { get; set; }
-        [Required]
+        [Required(AllowEmptyStrings = false)]
         public string Password { get; set; }
     }
 }

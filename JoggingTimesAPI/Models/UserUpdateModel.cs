@@ -4,7 +4,7 @@ namespace JoggingTimesAPI.Models
 {
     public class UserUpdateModel
     {
-        [Required]
+        [Required(AllowEmptyStrings = false)]
         public string Username { get; set; }
         public string EmailAddress { get; set; }
         public string Password { get; set; }

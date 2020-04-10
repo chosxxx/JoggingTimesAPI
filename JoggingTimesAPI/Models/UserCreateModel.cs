@@ -2,12 +2,15 @@
 
 namespace JoggingTimesAPI.Models
 {
-    public class UserAuthenticateModel
+    public class UserCreateModel
     {
         [Required(AllowEmptyStrings = false)]
         public string Username { get; set; }
-
+        [Required(AllowEmptyStrings = false)]
+        public string EmailAddress { get; set; }
         [Required(AllowEmptyStrings = false)]
         public string Password { get; set; }
+        [Required(AllowEmptyStrings = false)]
+        public UserRole Role { get; set; }
     }
 }
