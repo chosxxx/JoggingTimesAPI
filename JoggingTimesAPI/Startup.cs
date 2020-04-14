@@ -13,6 +13,8 @@ using JoggingTimesAPI.Services;
 using System.Threading.Tasks;
 using Microsoft.IdentityModel.Tokens;
 using AutoMapper;
+using JoggingTimesAPI.Entities;
+using JoggingTimesAPI.WeatherProviders;
 
 namespace JoggingTimesAPI
 {
@@ -71,12 +73,18 @@ namespace JoggingTimesAPI
                     IssuerSigningKey = new SymmetricSecurityKey(key),
                     ValidateIssuer = false,
                     ValidateAudience = false,
-                    
+
                 };
             });
 
             // configure DI for application services
             services.AddScoped<IUserService, UserService>();
+            services.AddScoped<IJoggingTimeLogService, JoggingTimeLogService>();
+
+            switch (appSettings.WeatherProviderName) {
+                case "ClimaCell": services.AddScoped<WeatherProvider, ClimaCellWeatherProvider>();
+                    break;
+            }
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

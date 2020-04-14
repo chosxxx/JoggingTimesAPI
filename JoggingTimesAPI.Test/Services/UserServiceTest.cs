@@ -7,6 +7,7 @@ using System;
 using JoggingTimesAPI.Services;
 using System.Threading.Tasks;
 using Shouldly;
+using JoggingTimesAPI.Entities;
 
 namespace JoggingTimesAPI.Test.Services
 {
@@ -20,15 +21,13 @@ namespace JoggingTimesAPI.Test.Services
         public UserServiceTest()
         {
             _mockBuilder = new MockBuilder();
-            _dataContext = new Mock<JoggingTimesDataContext>(
-                new DbContextOptionsBuilder<JoggingTimesDataContext>()
-                .UseInMemoryDatabase("TestJogglingTimesDB").Options);
-            _userService = new UserService(_dataContext.Object);
+            _dataContext = _mockBuilder.CreateDataContextMock();
+            _userService = new UserService(_dataContext.Object, null);
         }
 
         #region Test Anonymous
         [Fact]
-        [Trait("CRUD", "Anonymous")]
+        [Trait("UserUserCRUD", "Anonymous")]
         public async Task TestValidUserAuthenticates()
         {
             var userListMock = _mockBuilder.GenerateMockUsers(10, new List<User>{ _mockBuilder.UserUser });
@@ -41,7 +40,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "Anonymous")]
+        [Trait("UserUserCRUD", "Anonymous")]
         public async Task TestInValidUserShouldNotAuthenticate()
         {
             var userListMock = _mockBuilder.GenerateMockUsers(10);
@@ -54,7 +53,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "Anonymous")]
+        [Trait("UserUserCRUD", "Anonymous")]
         public async Task TestRegisterNewUserShouldBeUser()
         {
             var userListMock = _mockBuilder.GenerateMockUsers(5);
@@ -68,7 +67,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "Anonymous")]
+        [Trait("UserUserCRUD", "Anonymous")]
         public async Task TestRegisterExistingUserShouldFail()
         {
             var userListMock = _mockBuilder.GenerateMockUsers(5, new List<User> { _mockBuilder.ManagerUser });
@@ -84,7 +83,7 @@ namespace JoggingTimesAPI.Test.Services
 
         #region Test CRUD User
         [Fact]
-        [Trait("CRUD", "User")]
+        [Trait("UserCRUD", "User")]
         public async Task TestUserCanOnlyGetHimself()
         {
             var authenticatedUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, false);
@@ -116,7 +115,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "User")]
+        [Trait("UserCRUD", "User")]
         public async Task TestUserCannotCreateOtherUsers()
         {
             var authenticatedUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, false);
@@ -135,7 +134,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "User")]
+        [Trait("UserCRUD", "User")]
         public async Task TestUserCanUpdateOnlyHimselfButNotChangeRole()
         {
             var authenticatedUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, false);
@@ -175,7 +174,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "User")]
+        [Trait("UserCRUD", "User")]
         public async Task TestUserCanDeleteOnlyHimself()
         {
             var authenticatedUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, false);
@@ -206,7 +205,7 @@ namespace JoggingTimesAPI.Test.Services
 
         #region Test CRUD Manager
         [Fact]
-        [Trait("CRUD", "Manager")]
+        [Trait("UserCRUD", "Manager")]
         public async Task TestManagerCanGetUsersAndHimself()
         {
             var authenticatedManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, false);
@@ -237,7 +236,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "Manager")]
+        [Trait("UserCRUD", "Manager")]
         public async Task TestManagerCanOnlyCreateUsers()
         {
             var authenticatedManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, false);
@@ -267,7 +266,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "Manager")]
+        [Trait("UserCRUD", "Manager")]
         public async Task TestManagerCanUpdateUsersAndHimselfButNotChangeRole()
         {
             var authenticatedManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, false);
@@ -313,7 +312,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "Manager")]
+        [Trait("UserCRUD", "Manager")]
         public async Task TestManagerCanDeleteUsersAndHimself()
         {
             var authenticatedManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, false);
@@ -349,7 +348,7 @@ namespace JoggingTimesAPI.Test.Services
 
         #region Test CRUD Admin
         [Fact]
-        [Trait("CRUD", "Admin")]
+        [Trait("UserCRUD", "Admin")]
         public async Task TestAdminCanGetAnyone()
         {
             var authenticatedAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, false);
@@ -375,7 +374,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "Admin")]
+        [Trait("UserCRUD", "Admin")]
         public async Task TestAdminCanCreateAnyone()
         {
             var authenticatedAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, false);
@@ -403,7 +402,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "Admin")]
+        [Trait("UserCRUD", "Admin")]
         public async Task TestAdminCanUpdateAnyone()
         {
             var authenticatedAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, false);
@@ -441,7 +440,7 @@ namespace JoggingTimesAPI.Test.Services
         }
 
         [Fact]
-        [Trait("CRUD", "Admin")]
+        [Trait("UserCRUD", "Admin")]
         public async Task TestAdminCanDeleteAnyone()
         {
             var authenticatedAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, false);

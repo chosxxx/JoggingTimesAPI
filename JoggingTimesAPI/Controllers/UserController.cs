@@ -1,11 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using JoggingTimesAPI;
 using JoggingTimesAPI.Models;
 using JoggingTimesAPI.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -16,6 +12,7 @@ using System.Security.Claims;
 using AutoMapper;
 using JoggingTimesAPI.Helpers;
 using Microsoft.Extensions.Options;
+using JoggingTimesAPI.Entities;
 
 namespace JoggingTimesAPI.Controllers
 {
@@ -117,6 +114,20 @@ namespace JoggingTimesAPI.Controllers
             }
         }
 
+        [HttpGet("{name}")]
+        public async Task<IActionResult> GetByName(string userName)
+        {
+            try
+            {
+                var user = await _userService.GetByUsername(userName, AuthenticatedUser);
+                return Ok(user);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpPut("update")]
         public async Task<IActionResult> Update(UserUpdateModel model)
         {
@@ -134,7 +145,7 @@ namespace JoggingTimesAPI.Controllers
             }
         }
 
-        [HttpDelete]
+        [HttpDelete("{name}")]
         public async Task<IActionResult> DeleteByName(string userName)
         {
             try

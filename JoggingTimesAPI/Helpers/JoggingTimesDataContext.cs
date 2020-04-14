@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using JoggingTimesAPI.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace JoggingTimesAPI.Helpers
 {
@@ -7,8 +8,10 @@ namespace JoggingTimesAPI.Helpers
         public JoggingTimesDataContext(DbContextOptions<JoggingTimesDataContext> options)
             : base(options)
         {
+
         }
 
         public virtual DbSet<User> Users { get; set; }
+        public virtual DbSet<JoggingTimeLog> JoggingTimeLogs { get; set; }
     }
 }

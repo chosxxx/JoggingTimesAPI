@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using JoggingTimesAPI.Entities;
 using JoggingTimesAPI.Models;
 
 namespace JoggingTimesAPI.Helpers

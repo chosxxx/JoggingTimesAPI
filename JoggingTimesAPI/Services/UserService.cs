@@ -1,7 +1,13 @@
-﻿using JoggingTimesAPI.Helpers;
+﻿using JoggingTimesAPI.Entities;
+using JoggingTimesAPI.Helpers;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
+using Irony.Interpreter.Evaluator;
+using Irony.Parsing;
 
 namespace JoggingTimesAPI.Services
 {
@@ -12,16 +18,19 @@ namespace JoggingTimesAPI.Services
         Task<User> Create(User user, User authenticatedUser);
         Task<User> Update(User user, User authenticatedUser);
         Task<User> GetByUsername(string userName, User authenticatedUser);
+        Task<IList<User>> GetAll(string filter, IDictionary<string, bool> orderByFields, int rowsPerPage, int pageNumber);
         Task<User> DeleteByUsername(string userName, User authenticatedUser);
     }
 
     public class UserService : IUserService
     {
-        private readonly JoggingTimesDataContext _context;
+        private readonly JoggingTimesDataContext _dataContext;
+        private IFilterEvaluator _filterEvaluator;
         
-        public UserService(JoggingTimesDataContext context)
+        public UserService(JoggingTimesDataContext context, IFilterEvaluator filterEvaluator)
         {
-            _context = context;
+            _dataContext = context;
+            _filterEvaluator = filterEvaluator;
         }
 
         public async Task<User> Authenticate(string userName, string password)
@@ -29,7 +38,7 @@ namespace JoggingTimesAPI.Services
             if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(password))
                 return null;
 
-            var user = await _context.Users.SingleOrDefaultAsync(
+            var user = await _dataContext.Users.SingleOrDefaultAsync(
                 u => u.Username.Equals(userName, StringComparison.OrdinalIgnoreCase));
 
             if (user == null || !user.ValidatePassword(password))
@@ -44,12 +53,52 @@ namespace JoggingTimesAPI.Services
         {
             if (string.IsNullOrEmpty(userName)) return null;
 
-            var existingUser = await _context.Users
+            var existingUser = await _dataContext.Users
                 .SingleOrDefaultAsync(u => u.Username.Equals(userName, StringComparison.OrdinalIgnoreCase));
 
             AuthorizeAction(existingUser.Username, existingUser.Role, authenticatedUser);
 
             return existingUser;
+        }
+
+        public async Task<IList<User>> GetAll(string filter, IDictionary<string, bool> orderByFields, int rowsPerPage, int pageNumber)
+        {
+            var param = "Address";
+            var propertyInfo = typeof(User).GetProperty(param);
+            var orderByAddress = _dataContext.Users.OrderBy(x => propertyInfo.GetValue(x, null));
+
+            var userQueryable = _dataContext.Users
+                .Where(_filterEvaluator.EvaluateUserFilterPredicate(filter));
+
+            if (orderByFields != null && orderByFields.Count >= 1)
+            {
+                IOrderedQueryable<User> orderedUserQueryable;
+                var field = orderByFields.GetEnumerator();
+                field.MoveNext();
+                if (field.Current.Value)
+                    orderedUserQueryable = userQueryable
+                        .OrderBy((Expression<Func<User, object>>)_filterEvaluator.EvaluateUserKeySelector<User>(field.Current.Key));
+                else
+                    orderedUserQueryable = userQueryable
+                        .OrderByDescending((Expression<Func<User, object>>)_filterEvaluator.EvaluateUserKeySelector<User>(field.Current.Key));
+
+                while (field.MoveNext())
+                {
+                    if (field.Current.Value)
+                        orderedUserQueryable = orderedUserQueryable
+                            .ThenBy((Expression<Func<User, object>>)_filterEvaluator.EvaluateUserKeySelector<User>(field.Current.Key));
+                    else
+                        orderedUserQueryable = orderedUserQueryable
+                            .ThenByDescending((Expression<Func<User, object>>)_filterEvaluator.EvaluateUserKeySelector<User>(field.Current.Key));
+                }
+
+                userQueryable = orderedUserQueryable;
+            }
+
+            userQueryable = userQueryable.Skip(rowsPerPage * (pageNumber - 1));
+            userQueryable = userQueryable.Take(rowsPerPage);
+
+            return await userQueryable.ToListAsync();
         }
 
         /// <summary>
@@ -65,7 +114,7 @@ namespace JoggingTimesAPI.Services
 
         public async Task<User> Create(User user, User authenticatedUser)
         {
-            if (await _context.Users.AnyAsync(u => u.Username.Equals(user.Username, StringComparison.OrdinalIgnoreCase)))
+            if (await _dataContext.Users.AnyAsync(u => u.Username.Equals(user.Username, StringComparison.OrdinalIgnoreCase)))
             {
                 throw new ArgumentException($"User {user.Username} already exists.");
             }
@@ -74,8 +123,8 @@ namespace JoggingTimesAPI.Services
             if (user.Role != UserRole.User || authenticatedUser != null)
                 AuthorizeAction(user.Username, user.Role, authenticatedUser);
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+            _dataContext.Users.Add(user);
+            await _dataContext.SaveChangesAsync();
 
             return user;
         }
@@ -85,7 +134,7 @@ namespace JoggingTimesAPI.Services
             // Don't allow update TO a higher role than the authorized
             AuthorizeAction(user.Username, user.Role, authenticatedUser);
 
-            var existingUser = await _context.Users.SingleOrDefaultAsync(
+            var existingUser = await _dataContext.Users.SingleOrDefaultAsync(
                 u => u.Username.Equals(user.Username, StringComparison.OrdinalIgnoreCase));
 
             if (existingUser == null)
@@ -102,15 +151,15 @@ namespace JoggingTimesAPI.Services
 
             existingUser.Role = user.Role;
 
-            _context.Users.Update(existingUser);
-            await _context.SaveChangesAsync();
+            _dataContext.Users.Update(existingUser);
+            await _dataContext.SaveChangesAsync();
 
             return existingUser;
         }
 
         public async Task<User> DeleteByUsername(string userName, User authenticatedUser)
         {
-            var existingUser = await _context.Users.SingleOrDefaultAsync(
+            var existingUser = await _dataContext.Users.SingleOrDefaultAsync(
                 u => u.Username.Equals(userName, StringComparison.OrdinalIgnoreCase));
 
             if (existingUser == null)
@@ -118,8 +167,8 @@ namespace JoggingTimesAPI.Services
 
             AuthorizeAction(existingUser.Username, existingUser.Role, authenticatedUser);
 
-            _context.Users.Remove(existingUser);
-            await _context.SaveChangesAsync();
+            _dataContext.Users.Remove(existingUser);
+            await _dataContext.SaveChangesAsync();
 
             return existingUser;
         }

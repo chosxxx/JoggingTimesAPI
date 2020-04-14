@@ -1,8 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace JoggingTimesAPI
+namespace JoggingTimesAPI.Entities
 {
     public enum UserRole
     {
@@ -34,6 +35,10 @@ namespace JoggingTimesAPI
         protected byte[] PasswordHashKey { get; set; }
         protected byte[] PasswordHash { get; set; }
         public UserRole Role { get; set; }
+
+        [ForeignKey("UserName")]
+        public ICollection<JoggingTimeLog> JoggingTimeLogs { get; set; }
+
         public bool ValidatePassword(string password)
         {
             using (var hmac = new System.Security.Cryptography.HMACSHA512(PasswordHashKey))
