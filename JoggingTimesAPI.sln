@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.29926.136
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JoggingTimesAPI", "JoggingTimesAPI\JoggingTimesAPI.csproj", "{56FDF2CE-F0CB-41F1-98D1-FEA733ADF525}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JoggingTimesAPI.Test", "JoggingTimesAPI.Test\JoggingTimesAPI.Test.csproj", "{725549AE-076F-48A5-90DB-E4E195B3EDCB}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JoggingTimesAPI.Test", "JoggingTimesAPI.Test\JoggingTimesAPI.Test.csproj", "{725549AE-076F-48A5-90DB-E4E195B3EDCB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

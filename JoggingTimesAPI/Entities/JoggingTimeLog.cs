@@ -9,7 +9,7 @@ namespace JoggingTimesAPI.Entities
     {
         [Key]
         public int JoggingTimeLogId { get; set; }
-        public string UserName { get; set; }
+        public string Username { get; set; }
         public DateTime StartDateTime { get; set; }
         public DateTime UpdatedDateTime { get; set; }
         public double DistanceMetres { get; set; }
@@ -17,6 +17,7 @@ namespace JoggingTimesAPI.Entities
         public double Longitude { get; set; }
         public bool Active { get; set; }
 
+        [ForeignKey("Username")]
         public User User { get; set; }
     }
 }

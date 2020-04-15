@@ -3,12 +3,12 @@ using JoggingTimesAPI.Entities;
 using JoggingTimesAPI.Helpers;
 using JoggingTimesAPI.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Moq;
 using Shouldly;
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -16,33 +16,20 @@ namespace JoggingTimesAPI.Test.Controllers
 {
     public class UserControllerTest
     {
+        private GeneralValidations _validations;
         private MockBuilder _mockBuilder;
         private Mock<IUserService> _userService;
         private UserController _userController;
 
         public UserControllerTest()
         {
+            _validations = new GeneralValidations();
             _mockBuilder = new MockBuilder();
             _userService = _mockBuilder.GenerateMockUserService();
             _userController = new UserController(
                 _userService.Object,
                 _mockBuilder.CreateMapper(),
                 Options.Create(new AppSettings { Secret = "DontUseThisUnsafeSecret" }));
-        }
-
-        private void ValidateActionResult(IActionResult actionResult, Type expectedResultType, IDictionary<string, object> propertyValues)
-        {
-            actionResult.ShouldBeOfType(expectedResultType);
-            var requestResult = (actionResult as ObjectResult).Value;
-
-            foreach (var pv in propertyValues)
-            {
-                requestResult
-                    .GetType()
-                    .GetProperty(pv.Key)
-                    .GetValue(requestResult)
-                    .ShouldBe(pv.Value);
-            }
         }
 
         [Fact]
@@ -58,7 +45,7 @@ namespace JoggingTimesAPI.Test.Controllers
                 EmailAddress = _mockBuilder.UserUser.EmailAddress
             });
 
-            ValidateActionResult(actionResult, typeof(OkObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult),
                 new Dictionary<string, object> {
                         { "Username", _mockBuilder.UserUser.Username },
                         { "NewPassword", _mockBuilder.UserUser.NewPassword },
@@ -84,7 +71,7 @@ namespace JoggingTimesAPI.Test.Controllers
                 Username = _mockBuilder.UserUser.Username,
                 Password = _mockBuilder.UserUser.NewPassword
             });
-            ValidateActionResult(actionResult, typeof(OkObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult),
                 new Dictionary<string, object> {
                     { "Username", _mockBuilder.UserUser.Username },
                     { "Role", _mockBuilder.UserUser.Role }
@@ -96,7 +83,7 @@ namespace JoggingTimesAPI.Test.Controllers
                 Password = _mockBuilder.ManagerUser.NewPassword
             });
 
-            ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
             new Dictionary<string, object> {
                     { "message", "Invalid username and/or password." }
                 });
@@ -113,7 +100,7 @@ namespace JoggingTimesAPI.Test.Controllers
 
             // On error, should return bad request
             var actionResult = await _userController.GetByName(_mockBuilder.UserUser.Username);
-            ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
                 new Dictionary<string, object> {
                     { "message", "Exception message" }
                 });
@@ -121,13 +108,40 @@ namespace JoggingTimesAPI.Test.Controllers
             // If Ok, should return user data
             _userController.AuthenticatedUser = _mockBuilder.AdminUser;
             actionResult = await _userController.GetByName(_mockBuilder.UserUser.Username);
-            ValidateActionResult(actionResult, typeof(OkObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult),
                 new Dictionary<string, object> {
                     { "Username", _mockBuilder.UserUser.Username },
                     { "NewPassword", _mockBuilder.UserUser.NewPassword },
                     { "Role", _mockBuilder.UserUser.Role },
                     { "EmailAddress", _mockBuilder.UserUser.EmailAddress },
                 });
+            _userController.AuthenticatedUser = null;
+        }
+
+        [Fact]
+        [Trait("Actions", "User")]
+        public async Task TestGetAllOnErrorReturnsBadRequest()
+        {
+            var userList = await _mockBuilder.GenerateMockUsers(10).Object.ToListAsync();
+
+            _userService.Setup(s => s.GetAll(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), null))
+                .ThrowsAsync(new InvalidOperationException("Exception message"));
+            _userService.Setup(s => s.GetAll(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsNotNull<User>()))
+                .ReturnsAsync(userList);
+
+            var model = new Models.GetAllModel();
+
+            // On error, should return bad request
+            var actionResult = await _userController.GetAll(model);
+            _validations.ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+                new Dictionary<string, object> {
+                    { "message", "Exception message" }
+                });
+
+            // If Ok, should return user data
+            _userController.AuthenticatedUser = _mockBuilder.AdminUser;
+            actionResult = await _userController.GetAll(model);
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult), userList);
             _userController.AuthenticatedUser = null;
         }
 
@@ -150,7 +164,7 @@ namespace JoggingTimesAPI.Test.Controllers
 
             // On error, should return bad request
             var actionResult = await _userController.Update(updateModel);
-            ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
                 new Dictionary<string, object> {
                     { "message", "Exception message" }
                 });
@@ -158,7 +172,7 @@ namespace JoggingTimesAPI.Test.Controllers
             // If Ok, should return user data
             _userController.AuthenticatedUser = _mockBuilder.AdminUser;
             actionResult = await _userController.Update(updateModel);
-            ValidateActionResult(actionResult, typeof(OkObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult),
             new Dictionary<string, object> {
                     { "Username", _mockBuilder.UserUser.Username },
                     { "NewPassword", _mockBuilder.UserUser.NewPassword },
@@ -179,7 +193,7 @@ namespace JoggingTimesAPI.Test.Controllers
 
             // On error, should return bad request
             var actionResult = await _userController.DeleteByName(_mockBuilder.UserUser.Username);
-            ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
                 new Dictionary<string, object> {
                     { "message", "Exception message" }
                 });
@@ -187,7 +201,7 @@ namespace JoggingTimesAPI.Test.Controllers
             // If Ok, should return user data
             _userController.AuthenticatedUser = _mockBuilder.AdminUser;
             actionResult = await _userController.DeleteByName(_mockBuilder.UserUser.Username);
-            ValidateActionResult(actionResult, typeof(OkObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult),
                 new Dictionary<string, object> {
                     { "Username", _mockBuilder.UserUser.Username },
                     { "NewPassword", _mockBuilder.UserUser.NewPassword },

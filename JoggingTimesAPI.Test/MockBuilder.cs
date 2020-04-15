@@ -10,9 +10,11 @@ using Microsoft.Extensions.Options;
 using MockQueryable.Moq;
 using Moq;
 using Newtonsoft.Json.Linq;
+using Shouldly;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace JoggingTimesAPI.Test
 {
@@ -88,7 +90,7 @@ namespace JoggingTimesAPI.Test
             };
         }
 
-        internal JObject GenerateCurrentWeatherInfo()
+        public JObject GenerateCurrentWeatherInfo()
         {
             return JObject.FromObject(new
             {
@@ -169,7 +171,7 @@ namespace JoggingTimesAPI.Test
                     l.UpdatedDateTime = l.StartDateTime.AddSeconds(
                         // 30% of the logs will have same UpdatedDateTime as StartDateTime
                         f.Random.Bool(0.3f) ? 0 : f.Random.UInt(max: 3 * 60 * 60));
-                    l.UserName = l.User.Username;
+                    l.Username = l.User.Username;
                 })
                 .Generate(countForRules);
 
@@ -197,7 +199,7 @@ namespace JoggingTimesAPI.Test
                     l.UpdatedDateTime = l.StartDateTime.AddSeconds(
                         // 30% of the logs will have same UpdatedDateTime as StartDateTime
                         f.Random.Bool(0.3f) ? 0 : f.Random.UInt(max: 3 * 60 * 60));
-                    l.UserName = l.User.Username;
+                    l.Username = l.User.Username;
                 })
                 .Generate(count);
 
@@ -231,7 +233,6 @@ namespace JoggingTimesAPI.Test
         {
             return new Mock<IWeatherProvider>();
         }
-
 
         public Mock<JoggingTimesDataContext> CreateDataContextMock()
         {

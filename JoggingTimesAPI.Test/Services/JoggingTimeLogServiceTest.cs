@@ -20,16 +20,83 @@ namespace JoggingTimesAPI.Test.Services
         private const string shorterDistanceErrorMessage = "New distance should be longer than current distance.";
         private const string logDoesntExistErrorMessage = "Could not find specified Log.";
 
+        private GeneralValidations _validations;
         private MockBuilder _mockBuilder;
         private JoggingTimeLogService _logService;
+        private Mock<IFilterEvaluator> _evaluator;
         private Mock<JoggingTimesDataContext> _dataContext;
 
         public JoggingTimeLogServiceTest()
         {
+            _validations = new GeneralValidations();
             _mockBuilder = new MockBuilder();
             _dataContext = _mockBuilder.CreateDataContextMock();
-            _logService = new JoggingTimeLogService(_dataContext.Object, null);
+            _evaluator = new Mock<IFilterEvaluator>();
+            _logService = new JoggingTimeLogService(_dataContext.Object, _evaluator.Object);
         }
+
+        #region Get All
+        [Fact]
+        [Trait("JoggingTimeLogCRUD", "GetAll")]
+        public async Task TestUserCanOnlyGetHisLogs()
+        {
+            var authenticatedUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, true);
+            var userListMock = _mockBuilder.GenerateMockUsers(10,
+                new List<User> { _mockBuilder.UserUser, _mockBuilder.ManagerUser, _mockBuilder.AdminUser, authenticatedUser });
+            var logListMock = _mockBuilder.GenerateMockLogs(20, await userListMock.Object.ToListAsync(), new List<JoggingTimeLog>());
+
+            _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
+            _dataContext.Setup(x => x.JoggingTimeLogs).Returns(logListMock.Object);
+            // Evaluator always returns true so we can only test the User Role validation
+            _evaluator.Setup(e => e.EvaluateLogFilterPredicate(It.IsAny<string>())).Returns(u => true);
+
+            // User gets zero records
+            var logList = await _logService.GetAll("someFilter", 100, 1, authenticatedUser);
+            _validations.AssertFullEnum(logList, await logListMock.Object
+                .Where(l => l.Username.Equals(authenticatedUser.Username))
+                .Take(10).ToListAsync());
+        }
+
+        [Fact]
+        [Trait("JoggingTimeLogCRUD", "GetAll")]
+        public async Task TestManagerCanOnlyGetHisAndUsersLogs()
+        {
+            var authenticatedManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, true);
+            var userListMock = _mockBuilder.GenerateMockUsers(10,
+                new List<User> { _mockBuilder.UserUser, _mockBuilder.ManagerUser, _mockBuilder.AdminUser, authenticatedManager });
+            var logListMock = _mockBuilder.GenerateMockLogs(20, await userListMock.Object.ToListAsync(), new List<JoggingTimeLog>());
+
+            _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
+            _dataContext.Setup(x => x.JoggingTimeLogs).Returns(logListMock.Object);
+            // Evaluator always returns true so we can only test the User Role validation
+            _evaluator.Setup(e => e.EvaluateLogFilterPredicate(It.IsAny<string>())).Returns(u => true);
+
+            // User gets zero records
+            var logList = await _logService.GetAll("someFilter", 10, 1, authenticatedManager);
+            _validations.AssertFullEnum(logList, await logListMock.Object
+                .Where(l => l.User.Role == UserRole.User || l.Username.Equals(authenticatedManager.Username))
+                .Take(10).ToListAsync());
+        }
+
+        [Fact]
+        [Trait("JoggingTimeLogCRUD", "GetAll")]
+        public async Task TestAdminCanGetAllLogs()
+        {
+            var authenticatedAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, true);
+            var userListMock = _mockBuilder.GenerateMockUsers(10,
+                new List<User> { _mockBuilder.UserUser, _mockBuilder.ManagerUser, _mockBuilder.AdminUser, authenticatedAdmin });
+            var logListMock = _mockBuilder.GenerateMockLogs(20, await userListMock.Object.ToListAsync(), new List<JoggingTimeLog>());
+
+            _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
+            _dataContext.Setup(x => x.JoggingTimeLogs).Returns(logListMock.Object);
+            // Evaluator always returns true so we can only test the User Role validation
+            _evaluator.Setup(e => e.EvaluateLogFilterPredicate(It.IsAny<string>())).Returns(u => true);
+
+            // User gets zero records
+            var logList = await _logService.GetAll("someFilter", 10, 1, authenticatedAdmin);
+            _validations.AssertFullEnum(logList, await logListMock.Object.Take(10).ToListAsync());
+        }
+        #endregion
 
         #region Start Log
         [Fact]
@@ -50,7 +117,7 @@ namespace JoggingTimesAPI.Test.Services
 
             // Valid user can log
             var returnedLog = await _logService.StartLog(_mockBuilder.UserUser, 1, 2);
-            returnedLog.User.ShouldBeSameAs(_mockBuilder.UserUser);
+            returnedLog.Username.ShouldBe(_mockBuilder.UserUser.Username);
             returnedLog.Latitude.ShouldBe(1);
             returnedLog.Longitude.ShouldBe(2);
             returnedLog.DistanceMetres.ShouldBe(0);
@@ -79,7 +146,7 @@ namespace JoggingTimesAPI.Test.Services
             _dataContext.Setup(x => x.JoggingTimeLogs).Returns(logListMock.Object);
 
             var returnedLog = await _logService.StartLog(_mockBuilder.UserUser, 10, 20);
-            returnedLog.User.ShouldBeSameAs(_mockBuilder.UserUser);
+            returnedLog.Username.ShouldBe(_mockBuilder.UserUser.Username);
             returnedLog.Latitude.ShouldBe(10);
             returnedLog.Longitude.ShouldBe(20);
             returnedLog.DistanceMetres.ShouldBe(0);

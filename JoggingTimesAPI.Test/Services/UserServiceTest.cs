@@ -8,21 +8,26 @@ using JoggingTimesAPI.Services;
 using System.Threading.Tasks;
 using Shouldly;
 using JoggingTimesAPI.Entities;
+using System.Linq;
 
 namespace JoggingTimesAPI.Test.Services
 {
     public class UserServiceTest
     {
         private const string unauthorizedErrorMessage = "User is unauthorized to perform this action.";
+        private GeneralValidations _validations;
         private MockBuilder _mockBuilder;
         private UserService _userService;
         private Mock<JoggingTimesDataContext> _dataContext;
+        private Mock<IFilterEvaluator> _evaluator;
 
         public UserServiceTest()
         {
+            _validations = new GeneralValidations();
             _mockBuilder = new MockBuilder();
             _dataContext = _mockBuilder.CreateDataContextMock();
-            _userService = new UserService(_dataContext.Object, null);
+            _evaluator = new Mock<IFilterEvaluator>();
+            _userService = new UserService(_dataContext.Object, _evaluator.Object);
         }
 
         #region Test Anonymous
@@ -112,6 +117,24 @@ namespace JoggingTimesAPI.Test.Services
             (await Should
                 .ThrowAsync<InvalidOperationException>(_userService.GetByUsername(_mockBuilder.AdminUser.Username, authenticatedUser)))
                 .Message.ShouldBe(unauthorizedErrorMessage);
+        }
+
+        [Fact]
+        [Trait("UserCRUD", "User")]
+        public async Task TestUserCannotGetBulkList()
+        {
+            var authenticatedUser = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.UserUser, true);
+
+            var userListMock = _mockBuilder.GenerateMockUsers(10,
+                new List<User> { _mockBuilder.UserUser, _mockBuilder.ManagerUser, _mockBuilder.AdminUser, authenticatedUser });
+
+            _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
+            // Evaluator always returns true so we can only test the User Role validation
+            _evaluator.Setup(e => e.EvaluateUserFilterPredicate(It.IsAny<string>())).Returns(u => true);
+
+            // User gets zero records
+            var userList = await _userService.GetAll("someFilter", 5, 1, authenticatedUser);
+            userList.ShouldBeEmpty();
         }
 
         [Fact]
@@ -233,6 +256,26 @@ namespace JoggingTimesAPI.Test.Services
             (await Should
                 .ThrowAsync<InvalidOperationException>(_userService.GetByUsername(_mockBuilder.AdminUser.Username, authenticatedManager)))
                 .Message.ShouldBe(unauthorizedErrorMessage);
+        }
+
+        [Fact]
+        [Trait("UserCRUD", "Manager")]
+        public async Task TestManagerCanOnlyGetUserBulkList()
+        {
+            var authenticatedManager = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.ManagerUser, true);
+
+            var userListMock = _mockBuilder.GenerateMockUsers(10,
+                new List<User> { _mockBuilder.UserUser, _mockBuilder.ManagerUser, _mockBuilder.AdminUser, authenticatedManager });
+
+            _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
+            // Evaluator always returns true so we can only test the User Role validation
+            _evaluator.Setup(e => e.EvaluateUserFilterPredicate(It.IsAny<string>())).Returns(u => true);
+
+            // Manager gets no admins or managers, but all Users
+            var userList = await _userService.GetAll("someFilter", 5, 1, authenticatedManager);
+            _validations.AssertFullEnum(userList, await userListMock.Object
+                .Where(u => u.Role == UserRole.User)
+                .Take(5).ToListAsync());
         }
 
         [Fact]
@@ -371,6 +414,24 @@ namespace JoggingTimesAPI.Test.Services
 
             returnedUser = await _userService.GetByUsername(anotherAdmin.Username, authenticatedAdmin);
             returnedUser.ShouldBeSameAs(anotherAdmin);
+        }
+
+        [Fact]
+        [Trait("UserCRUD", "Admin")]
+        public async Task TestAdminCanGetAll()
+        {
+            var authenticatedAdmin = _mockBuilder.SimpleCopyUserFrom(_mockBuilder.AdminUser, true);
+
+            var userListMock = _mockBuilder.GenerateMockUsers(10,
+                new List<User> { _mockBuilder.UserUser, _mockBuilder.ManagerUser, _mockBuilder.AdminUser, authenticatedAdmin });
+
+            _dataContext.Setup(x => x.Users).Returns(userListMock.Object);
+            // Evaluator always returns true so we can only test the User Role validation
+            _evaluator.Setup(e => e.EvaluateUserFilterPredicate(It.IsAny<string>())).Returns(u => true);
+
+            // Admin gets full set
+            var userList = await _userService.GetAll("someFilter", 5, 1, authenticatedAdmin);
+            _validations.AssertFullEnum(userList, await userListMock.Object.Take(5).ToListAsync());
         }
 
         [Fact]

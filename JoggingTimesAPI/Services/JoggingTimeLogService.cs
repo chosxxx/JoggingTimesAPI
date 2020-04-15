@@ -12,7 +12,8 @@ namespace JoggingTimesAPI.Services
 {
     public interface IJoggingTimeLogService
     {
-        Task<IList<JoggingTimeLog>> GetAll(string filter, IDictionary<string, bool> orderByFields, int rowsPerPage, int pageNumber);
+        Task<IList<JoggingTimeLog>> GetAll(string filter, int rowsPerPage, int pageNumber,
+            User authenticatedUser);
         Task<JoggingTimeLog> StartLog(User authenticatedUser, double latitude, double longitude);
         Task<JoggingTimeLog> UpdateDistance(User authenticatedUser, int logId, double distance);
         Task<JoggingTimeLog> StopLog(User authenticatedUser, int logId, double finalDistance);
@@ -35,39 +36,13 @@ namespace JoggingTimesAPI.Services
             _filterEvaluator = filterEvaluator;
         }
 
-        public async Task<IList<JoggingTimeLog>> GetAll(string filter, IDictionary<string, bool> orderByFields, int rowsPerPage, int pageNumber)
+        public async Task<IList<JoggingTimeLog>> GetAll(string filter, int rowsPerPage, int pageNumber, User authenticatedUser)
         {
             var logQueryable = _dataContext.JoggingTimeLogs
-                .Where(_filterEvaluator.EvaluateLogFilterPredicate(filter));
-
-            if (orderByFields != null && orderByFields.Count >= 1)
-            {
-                IOrderedQueryable<JoggingTimeLog> orderedUserQueryable;
-                var field = orderByFields.GetEnumerator();
-                field.MoveNext();
-                if (field.Current.Value)
-                    orderedUserQueryable = 
-                        logQueryable.OrderBy((Expression<Func<JoggingTimeLog, object>>)
-                        _filterEvaluator.EvaluateLogKeySelector<JoggingTimeLog>(field.Current.Key));
-                else
-                    orderedUserQueryable = 
-                        logQueryable.OrderByDescending((Expression<Func<JoggingTimeLog, object>>)
-                        _filterEvaluator.EvaluateLogKeySelector<JoggingTimeLog>(field.Current.Key));
-
-                while (field.MoveNext())
-                {
-                    if (field.Current.Value)
-                        orderedUserQueryable = 
-                            orderedUserQueryable.ThenBy((Expression<Func<JoggingTimeLog, object>>)
-                            _filterEvaluator.EvaluateLogKeySelector<JoggingTimeLog>(field.Current.Key));
-                    else
-                        orderedUserQueryable = 
-                            orderedUserQueryable.ThenByDescending((Expression<Func<JoggingTimeLog, object>>)
-                            _filterEvaluator.EvaluateLogKeySelector<JoggingTimeLog>(field.Current.Key));
-                }
-
-                logQueryable = orderedUserQueryable;
-            }
+                // Admins can get any record, Managers can get Users, anyone can get his own records
+                .Where(l => authenticatedUser.Role == UserRole.Admin || l.User.Role < authenticatedUser.Role || l.Username.Equals(authenticatedUser.Username));
+            if (!string.IsNullOrEmpty(filter))
+                logQueryable = logQueryable.Where(_filterEvaluator.EvaluateLogFilterPredicate(filter));
 
             logQueryable = logQueryable.Skip(rowsPerPage * (pageNumber - 1));
             logQueryable = logQueryable.Take(rowsPerPage);
@@ -110,14 +85,13 @@ namespace JoggingTimesAPI.Services
             }
 
             var activeLogs = _dataContext.JoggingTimeLogs
-                .Where(j => j.User.Username.Equals(authenticatedUser.Username) && j.Active);
+                .Where(j => j.Username.Equals(authenticatedUser.Username) && j.Active);
             await activeLogs.ForEachAsync(l => l.Active = false);
             _dataContext.UpdateRange(activeLogs);
 
             var log = new JoggingTimeLog
             {
-                User = authenticatedUser,
-                UserName = authenticatedUser.Username,
+                Username = authenticatedUser.Username,
                 StartDateTime = DateTime.UtcNow,
                 UpdatedDateTime = DateTime.UtcNow,
                 DistanceMetres = 0,
@@ -158,9 +132,9 @@ namespace JoggingTimesAPI.Services
                 throw new InvalidOperationException(invalidUserErrorMessage);
 
             if (validateRole) 
-                AuthorizeAction(log.UserName, log.User.Role, authenticatedUser);
+                AuthorizeAction(log.Username, log.User.Role, authenticatedUser);
             else
-            if (!log.UserName.Equals(authenticatedUser.Username))
+            if (!log.Username.Equals(authenticatedUser.Username))
                 throw new InvalidOperationException(invalidUserErrorMessage);
 
             if (validateActive && !log.Active)

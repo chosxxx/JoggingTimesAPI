@@ -9,6 +9,7 @@ namespace JoggingTimesAPI.Models
         public string Username { get; set; }
         public string EmailAddress { get; set; }
         public string Password { get; set; }
-        public UserRole Role { get; set; }
+        [Range(1, 3)]
+        public UserRole? Role { get; set; }
     }
 }

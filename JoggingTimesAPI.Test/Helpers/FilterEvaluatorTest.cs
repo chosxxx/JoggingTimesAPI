@@ -5,8 +5,6 @@ using Shouldly;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -15,24 +13,13 @@ namespace JoggingTimesAPI.Test.Helpers
     public class FilterEvaluatorTest
     {
         private FilterEvaluator _evaluator;
+        private GeneralValidations _validations;
         private MockBuilder _mockBuilder;
-
-        private async Task CompareQueryables<T>(IQueryable<T> q1, IQueryable<T> q2)
-        {
-            var l1 = await q1.ToListAsync();
-            var l2 = await q2.ToListAsync();
-
-            l1.Count.ShouldBe(l2.Count);
-
-            for (int i = 0; i < l1.Count; i++)
-            {
-                l1[i].ShouldBeSameAs(l2[i]);
-            }
-        }
 
         public FilterEvaluatorTest()
         {
             _evaluator = new FilterEvaluator();
+            _validations = new GeneralValidations();
             _mockBuilder = new MockBuilder();
         }
 
@@ -48,7 +35,7 @@ namespace JoggingTimesAPI.Test.Helpers
             var filteredByLambda = userList.Where(
                 u => (u.Role == UserRole.User || u.Role == UserRole.Admin) && !u.Username.Equals(_mockBuilder.UserUser.Username));
 
-            await CompareQueryables(filteredByEvaluator, filteredByLambda);
+            await _validations.AssertFullEnum(filteredByEvaluator, filteredByLambda);
         }
 
         [Fact]
@@ -65,7 +52,7 @@ namespace JoggingTimesAPI.Test.Helpers
             var filteredByLambda = logList.Where(
                 l => l.StartDateTime >= startDate && l.StartDateTime == l.UpdatedDateTime);
 
-            await CompareQueryables(filteredByEvaluator, filteredByLambda);
+            await _validations.AssertFullEnum(filteredByEvaluator, filteredByLambda);
         }
     }
 }

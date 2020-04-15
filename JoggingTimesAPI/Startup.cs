@@ -1,4 +1,3 @@
-using JoggingTimesAPI.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -10,11 +9,11 @@ using System;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using JoggingTimesAPI.Services;
-using System.Threading.Tasks;
 using Microsoft.IdentityModel.Tokens;
 using AutoMapper;
 using JoggingTimesAPI.Entities;
 using JoggingTimesAPI.WeatherProviders;
+using Microsoft.OpenApi.Models;
 
 namespace JoggingTimesAPI
 {
@@ -33,9 +32,14 @@ namespace JoggingTimesAPI
             services.AddDbContext<JoggingTimesDataContext>(opt =>
                 opt.UseInMemoryDatabase("JoggingTimes"));
             services.AddCors();
-            services.AddControllers();
-
+            services.AddControllers().AddNewtonsoftJson();
             services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
+            services.AddMvc();
+            // Register the Swagger generator, defining one or more Swagger documents  
+            services.AddSwaggerGen(c =>
+            {
+                c.SwaggerDoc("v1", new OpenApiInfo { Title = "Jogging Times API", Version = "v1" });
+            });
 
             // configure strongly typed settings objects
             var appSettingsSection = Configuration.GetSection("AppSettings");
@@ -80,9 +84,10 @@ namespace JoggingTimesAPI
             // configure DI for application services
             services.AddScoped<IUserService, UserService>();
             services.AddScoped<IJoggingTimeLogService, JoggingTimeLogService>();
+            services.AddScoped<IFilterEvaluator, FilterEvaluator>();
 
             switch (appSettings.WeatherProviderName) {
-                case "ClimaCell": services.AddScoped<WeatherProvider, ClimaCellWeatherProvider>();
+                case "ClimaCell": services.AddScoped<IWeatherProvider, ClimaCellWeatherProvider>();
                     break;
             }
         }
@@ -105,6 +110,11 @@ namespace JoggingTimesAPI
             app.UseRouting();
             app.UseAuthentication();
             app.UseAuthorization();
+            app.UseSwagger();
+            app.UseSwaggerUI(c =>
+            {
+                c.SwaggerEndpoint("/swagger/v1/swagger.json", "Jogging Times V1");
+            });
 
             app.UseEndpoints(endpoints =>
             {

@@ -158,7 +158,10 @@ namespace JoggingTimesAPI.Helpers
         public Expression<Func<User, bool>> EvaluateUserFilterPredicate(string filter)
         {
             var parserTree = GetParseTree(filter);
-            return GenerateBinaryExpression<User>(parserTree.Root.ChildNodes[0]);
+            if (parserTree?.Root?.ChildNodes != null && parserTree.Root.ChildNodes.Count > 0)
+                return GenerateBinaryExpression<User>(parserTree.Root.ChildNodes[0]);
+
+            return u => true;
         }
 
         public Expression<Func<JoggingTimeLog, bool>> EvaluateLogFilterPredicate(string filter)
@@ -173,7 +176,7 @@ namespace JoggingTimesAPI.Helpers
             return key.ToLower() switch
             {
                 "joggingtimelogid" => (Expression<Func<T, int>>)(t => ((JoggingTimeLog)Convert.ChangeType(t, typeof(JoggingTimeLog))).JoggingTimeLogId),
-                "username" => (Expression<Func<T, string>>)(t => ((JoggingTimeLog)Convert.ChangeType(t, typeof(JoggingTimeLog))).UserName),
+                "username" => (Expression<Func<T, string>>)(t => ((JoggingTimeLog)Convert.ChangeType(t, typeof(JoggingTimeLog))).Username),
                 "startdatetime" => (Expression<Func<T, DateTime>>)(t => ((JoggingTimeLog)Convert.ChangeType(t, typeof(JoggingTimeLog))).StartDateTime),
                 "updateddatetime" => (Expression<Func<T, DateTime>>)(t => ((JoggingTimeLog)Convert.ChangeType(t, typeof(JoggingTimeLog))).UpdatedDateTime),
                 "distancemeters" => (Expression<Func<T, double>>)(t => ((JoggingTimeLog)Convert.ChangeType(t, typeof(JoggingTimeLog))).DistanceMetres),

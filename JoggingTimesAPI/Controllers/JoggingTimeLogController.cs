@@ -5,9 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using JoggingTimesAPI.Models;
 using JoggingTimesAPI.Services;
 using Microsoft.AspNetCore.Authorization;
-using System.IdentityModel.Tokens.Jwt;
-using System.Text;
-using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
 using AutoMapper;
 using JoggingTimesAPI.Helpers;
@@ -19,13 +16,12 @@ using Newtonsoft.Json.Linq;
 namespace JoggingTimesAPI.Controllers
 {
     [Authorize]
+    [Produces("application/json")]
     [Route("api/[controller]")]
     [ApiController]
     public class JoggingTimeLogController : ControllerBase
     {
         private IJoggingTimeLogService _logService;
-        private IMapper _mapper;
-        private readonly AppSettings _appSettings;
         private User _authenticatedUser;
         private readonly IWeatherProvider _weatherProvider;
 
@@ -58,13 +54,25 @@ namespace JoggingTimesAPI.Controllers
             IOptions<AppSettings> appSettings)
         {
             _logService = logService;
-            _mapper = mapper;
-            _appSettings = appSettings.Value;
             _weatherProvider = weatherProvider;
         }
 
+        [HttpGet("get")]
+        public async Task<IActionResult> GetAll([FromBody]GetAllModel model)
+        {
+            try
+            {
+                var logList = await _logService.GetAll(model.Filter, model.RowsPerPage, model.PageNumber, AuthenticatedUser);
+                return Ok(logList);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpPut("start")]
-        public async Task<IActionResult> Start(JoggingTimeLogStartModel model)
+        public async Task<IActionResult> Start([FromBody]JoggingTimeLogStartModel model)
         {
             JoggingTimeLog log;
             try
@@ -94,7 +102,7 @@ namespace JoggingTimesAPI.Controllers
         }
 
         [HttpPut("update")]
-        public async Task<IActionResult> UpdateDistance(JoggingTimeLogUpdateModel model)
+        public async Task<IActionResult> UpdateDistance([FromBody]JoggingTimeLogUpdateModel model)
         {
             try
             {
@@ -109,7 +117,7 @@ namespace JoggingTimesAPI.Controllers
         }
 
         [HttpPut("stop")]
-        public async Task<IActionResult> Stop(JoggingTimeLogUpdateModel model)
+        public async Task<IActionResult> Stop([FromBody]JoggingTimeLogUpdateModel model)
         {
             try
             {
@@ -123,8 +131,8 @@ namespace JoggingTimesAPI.Controllers
             }
         }
 
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteById(int id)
+        [HttpDelete("delete/{id}")]
+        public async Task<IActionResult> DeleteById([FromRoute]int id)
         {
             try
             {

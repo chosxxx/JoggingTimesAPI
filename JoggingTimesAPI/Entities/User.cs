@@ -32,12 +32,9 @@ namespace JoggingTimesAPI.Entities
                 return _newPassword;
             }
         }
-        protected byte[] PasswordHashKey { get; set; }
-        protected byte[] PasswordHash { get; set; }
+        public byte[] PasswordHashKey { get; set; }
+        public byte[] PasswordHash { get; set; }
         public UserRole Role { get; set; }
-
-        [ForeignKey("UserName")]
-        public ICollection<JoggingTimeLog> JoggingTimeLogs { get; set; }
 
         public bool ValidatePassword(string password)
         {

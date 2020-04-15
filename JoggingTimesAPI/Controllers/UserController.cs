@@ -17,6 +17,7 @@ using JoggingTimesAPI.Entities;
 namespace JoggingTimesAPI.Controllers
 {
     [Authorize]
+    [Produces("application/json")]
     [Route("api/[controller]")]
     [ApiController]
     public class UserController : ControllerBase
@@ -79,7 +80,7 @@ namespace JoggingTimesAPI.Controllers
 
         [AllowAnonymous]
         [HttpPost("authenticate")]
-        public async Task<IActionResult> Authenticate(UserAuthenticateModel model)
+        public async Task<IActionResult> Authenticate([FromBody]UserAuthenticateModel model)
         {
             var user = await _userService.Authenticate(model.Username, model.Password);
 
@@ -98,7 +99,7 @@ namespace JoggingTimesAPI.Controllers
 
         [AllowAnonymous]
         [HttpPut("register")]
-        public async Task<IActionResult> Register(UserRegisterModel model)
+        public async Task<IActionResult> Register([FromBody]UserRegisterModel model)
         {
             var user = _mapper.Map<User>(model);
             user.NewPassword = model.Password;
@@ -114,8 +115,8 @@ namespace JoggingTimesAPI.Controllers
             }
         }
 
-        [HttpGet("{name}")]
-        public async Task<IActionResult> GetByName(string userName)
+        [HttpGet("{userName}")]
+        public async Task<IActionResult> GetByName([FromRoute]string userName)
         {
             try
             {
@@ -128,8 +129,22 @@ namespace JoggingTimesAPI.Controllers
             }
         }
 
+        [HttpGet("get")]
+        public async Task<IActionResult> GetAll([FromBody]GetAllModel model)
+        {
+            try
+            {
+                var userList = await _userService.GetAll(model.Filter, model.RowsPerPage, model.PageNumber, AuthenticatedUser);
+                return Ok(userList);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpPut("update")]
-        public async Task<IActionResult> Update(UserUpdateModel model)
+        public async Task<IActionResult> Update([FromBody]UserUpdateModel model)
         {
             var user = _mapper.Map<User>(model);
             user.NewPassword = model.Password;
@@ -145,8 +160,8 @@ namespace JoggingTimesAPI.Controllers
             }
         }
 
-        [HttpDelete("{name}")]
-        public async Task<IActionResult> DeleteByName(string userName)
+        [HttpDelete("delete/{userName}")]
+        public async Task<IActionResult> DeleteByName([FromRoute]string userName)
         {
             try
             {

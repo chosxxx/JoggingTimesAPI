@@ -4,13 +4,12 @@ using JoggingTimesAPI.Helpers;
 using JoggingTimesAPI.Services;
 using JoggingTimesAPI.WeatherProviders;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Moq;
 using Newtonsoft.Json.Linq;
-using Shouldly;
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -18,28 +17,15 @@ namespace JoggingTimesAPI.Test.Controllers
 {
     public class JoggingTimeLogControllerTest
     {
+        private GeneralValidations _validations;
         private MockBuilder _mockBuilder;
         private Mock<IJoggingTimeLogService> _logService;
         private Mock<IWeatherProvider> _weatherProvider;
         private JoggingTimeLogController _logController;
 
-        private void ValidateActionResult(IActionResult actionResult, Type expectedResultType, IDictionary<string, object> propertyValues)
-        {
-            actionResult.ShouldBeOfType(expectedResultType);
-            var requestResult = (actionResult as ObjectResult).Value;
-
-            foreach (var pv in propertyValues)
-            {
-                requestResult
-                    .GetType()
-                    .GetProperty(pv.Key)
-                    .GetValue(requestResult)
-                    .ShouldBe(pv.Value);
-            }
-        }
-
         public JoggingTimeLogControllerTest()
         {
+            _validations = new GeneralValidations();
             _mockBuilder = new MockBuilder();
             _logService = _mockBuilder.GenerateMockLogService();
             _weatherProvider = _mockBuilder.GenerateMockWeatherProvider();
@@ -49,6 +35,34 @@ namespace JoggingTimesAPI.Test.Controllers
                 _weatherProvider.Object,
                 Options.Create(new AppSettings { Secret = "DontUseThisUnsafeSecret" })
             );
+        }
+
+        [Fact]
+        [Trait("Actions", "JoggingTimeLog")]
+        public async Task TestGetAllOnErrorReturnsBadRequest()
+        {
+            var userList = await _mockBuilder.GenerateMockUsers(10).Object.ToListAsync();
+            var logList = await _mockBuilder.GenerateMockLogs(10, userList).Object.ToListAsync();
+
+            _logService.Setup(s => s.GetAll(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), null))
+                .ThrowsAsync(new InvalidOperationException("Exception message"));
+            _logService.Setup(s => s.GetAll(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsNotNull<User>()))
+                .ReturnsAsync(logList);
+
+            var model = new Models.GetAllModel();
+
+            // On error, should return bad request
+            var actionResult = await _logController.GetAll(model);
+            _validations.ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+                new Dictionary<string, object> {
+                    { "message", "Exception message" }
+                });
+
+            // If Ok, should return user data
+            _logController.AuthenticatedUser = _mockBuilder.AdminUser;
+            actionResult = await _logController.GetAll(model);
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult), logList);
+            _logController.AuthenticatedUser = null;
         }
 
         [Fact]
@@ -72,7 +86,7 @@ namespace JoggingTimesAPI.Test.Controllers
             // On error, should return bad request
             var actionResult = await _logController.Start(
                 new Models.JoggingTimeLogStartModel { Latitude = someLog.Latitude, Longitude = someLog.Longitude });
-            ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
                 new Dictionary<string, object> {
                     { "message", "Exception message" }
                 });
@@ -81,7 +95,7 @@ namespace JoggingTimesAPI.Test.Controllers
             _logController.AuthenticatedUser = _mockBuilder.UserUser;
             actionResult = await _logController.Start(
                 new Models.JoggingTimeLogStartModel { Latitude = someLog.Latitude, Longitude = someLog.Longitude });
-            ValidateActionResult(actionResult, typeof(OkObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult),
                 new Dictionary<string, object> {
                     { "JoggingTimeLogId", someLog.JoggingTimeLogId },
                     { "CurrentWeather", currentWeather }
@@ -111,7 +125,7 @@ namespace JoggingTimesAPI.Test.Controllers
             _logController.AuthenticatedUser = _mockBuilder.UserUser;
             var actionResult = await _logController.Start(
                 new Models.JoggingTimeLogStartModel { Latitude = someLog.Latitude, Longitude = someLog.Longitude });
-            ValidateActionResult(actionResult, typeof(OkObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult),
                 new Dictionary<string, object> {
                     { "JoggingTimeLogId", someLog.JoggingTimeLogId },
                     { "CurrentWeather", JObject.FromObject( new { message = $"Unable to get weather info. Error: {errorFromWeatherAPI}" }) }
@@ -139,7 +153,7 @@ namespace JoggingTimesAPI.Test.Controllers
             // On error, should return bad request
             var actionResult = await _logController.UpdateDistance(
                 new Models.JoggingTimeLogUpdateModel { JoggingTimeLogId = someLog.JoggingTimeLogId, DistanceMetres = someLog.DistanceMetres + 10 });
-            ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
                 new Dictionary<string, object> {
                     { "message", "Exception message" }
                 });
@@ -148,7 +162,7 @@ namespace JoggingTimesAPI.Test.Controllers
             _logController.AuthenticatedUser = _mockBuilder.UserUser;
             actionResult = await _logController.UpdateDistance(
                 new Models.JoggingTimeLogUpdateModel { JoggingTimeLogId = someLog.JoggingTimeLogId, DistanceMetres = someLog.DistanceMetres + 10 });
-            ValidateActionResult(actionResult, typeof(OkObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult),
                 new Dictionary<string, object> {
                     { "JoggingTimeLogId", someLog.JoggingTimeLogId }
                 });
@@ -173,7 +187,7 @@ namespace JoggingTimesAPI.Test.Controllers
             // On error, should return bad request
             var actionResult = await _logController.Stop(
                 new Models.JoggingTimeLogUpdateModel { JoggingTimeLogId = someLog.JoggingTimeLogId, DistanceMetres = someLog.DistanceMetres + 10 });
-            ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
                 new Dictionary<string, object> {
                     { "message", "Exception message" }
                 });
@@ -182,7 +196,7 @@ namespace JoggingTimesAPI.Test.Controllers
             _logController.AuthenticatedUser = _mockBuilder.UserUser;
             actionResult = await _logController.Stop(
                 new Models.JoggingTimeLogUpdateModel { JoggingTimeLogId = someLog.JoggingTimeLogId, DistanceMetres = someLog.DistanceMetres + 10 });
-            ValidateActionResult(actionResult, typeof(OkObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult),
                 new Dictionary<string, object> {
                     { "JoggingTimeLogId", someLog.JoggingTimeLogId }
                 });
@@ -206,7 +220,7 @@ namespace JoggingTimesAPI.Test.Controllers
 
             // On error, should return bad request
             var actionResult = await _logController.DeleteById(someLog.JoggingTimeLogId);
-            ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(BadRequestObjectResult),
                 new Dictionary<string, object> {
                     { "message", "Exception message" }
                 });
@@ -214,7 +228,7 @@ namespace JoggingTimesAPI.Test.Controllers
             // If Ok, should return log data
             _logController.AuthenticatedUser = _mockBuilder.UserUser;
             actionResult = await _logController.DeleteById(someLog.JoggingTimeLogId);
-            ValidateActionResult(actionResult, typeof(OkObjectResult),
+            _validations.ValidateActionResult(actionResult, typeof(OkObjectResult),
                 new Dictionary<string, object> {
                     { "JoggingTimeLogId", someLog.JoggingTimeLogId }
                 });

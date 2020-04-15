@@ -18,7 +18,7 @@ namespace JoggingTimesAPI.Services
         Task<User> Create(User user, User authenticatedUser);
         Task<User> Update(User user, User authenticatedUser);
         Task<User> GetByUsername(string userName, User authenticatedUser);
-        Task<IList<User>> GetAll(string filter, IDictionary<string, bool> orderByFields, int rowsPerPage, int pageNumber);
+        Task<IList<User>> GetAll(string filter, int rowsPerPage, int pageNumber, User authenticatedUser);
         Task<User> DeleteByUsername(string userName, User authenticatedUser);
     }
 
@@ -55,45 +55,21 @@ namespace JoggingTimesAPI.Services
 
             var existingUser = await _dataContext.Users
                 .SingleOrDefaultAsync(u => u.Username.Equals(userName, StringComparison.OrdinalIgnoreCase));
+            if (existingUser == null)
+                return null;
 
             AuthorizeAction(existingUser.Username, existingUser.Role, authenticatedUser);
 
             return existingUser;
         }
 
-        public async Task<IList<User>> GetAll(string filter, IDictionary<string, bool> orderByFields, int rowsPerPage, int pageNumber)
+        public async Task<IList<User>> GetAll(string filter, int rowsPerPage, int pageNumber, 
+            User authenticatedUser)
         {
-            var param = "Address";
-            var propertyInfo = typeof(User).GetProperty(param);
-            var orderByAddress = _dataContext.Users.OrderBy(x => propertyInfo.GetValue(x, null));
-
             var userQueryable = _dataContext.Users
-                .Where(_filterEvaluator.EvaluateUserFilterPredicate(filter));
-
-            if (orderByFields != null && orderByFields.Count >= 1)
-            {
-                IOrderedQueryable<User> orderedUserQueryable;
-                var field = orderByFields.GetEnumerator();
-                field.MoveNext();
-                if (field.Current.Value)
-                    orderedUserQueryable = userQueryable
-                        .OrderBy((Expression<Func<User, object>>)_filterEvaluator.EvaluateUserKeySelector<User>(field.Current.Key));
-                else
-                    orderedUserQueryable = userQueryable
-                        .OrderByDescending((Expression<Func<User, object>>)_filterEvaluator.EvaluateUserKeySelector<User>(field.Current.Key));
-
-                while (field.MoveNext())
-                {
-                    if (field.Current.Value)
-                        orderedUserQueryable = orderedUserQueryable
-                            .ThenBy((Expression<Func<User, object>>)_filterEvaluator.EvaluateUserKeySelector<User>(field.Current.Key));
-                    else
-                        orderedUserQueryable = orderedUserQueryable
-                            .ThenByDescending((Expression<Func<User, object>>)_filterEvaluator.EvaluateUserKeySelector<User>(field.Current.Key));
-                }
-
-                userQueryable = orderedUserQueryable;
-            }
+                .Where(_filterEvaluator.EvaluateUserFilterPredicate(filter))
+                // Admins can get anyone, Managers can only get Users, Users should not be allowed to get bulk User list
+                .Where(u => authenticatedUser.Role == UserRole.Admin || u.Role < authenticatedUser.Role);
 
             userQueryable = userQueryable.Skip(rowsPerPage * (pageNumber - 1));
             userQueryable = userQueryable.Take(rowsPerPage);
@@ -132,7 +108,8 @@ namespace JoggingTimesAPI.Services
         public async Task<User> Update(User user, User authenticatedUser)
         {
             // Don't allow update TO a higher role than the authorized
-            AuthorizeAction(user.Username, user.Role, authenticatedUser);
+            if (user.Role > 0)
+                AuthorizeAction(user.Username, user.Role, authenticatedUser);
 
             var existingUser = await _dataContext.Users.SingleOrDefaultAsync(
                 u => u.Username.Equals(user.Username, StringComparison.OrdinalIgnoreCase));
@@ -149,7 +126,8 @@ namespace JoggingTimesAPI.Services
             if (!string.IsNullOrEmpty(user.NewPassword))
                 existingUser.NewPassword = user.NewPassword;
 
-            existingUser.Role = user.Role;
+            if (user.Role > 0)
+                existingUser.Role = user.Role;
 
             _dataContext.Users.Update(existingUser);
             await _dataContext.SaveChangesAsync();
